@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dawa-Find · Backend
 
 REST API powering **Dawa-Find**, a real-time pharmacy & medicine locator for Vijayawada. Built with Node.js, Express, and MongoDB (with 2dsphere geo-indexing) — exposes JWT-based auth, geo-search over pharmacies, and a medicine/inventory catalog.
@@ -179,3 +180,7 @@ curl "http://localhost:5000/api/v1/pharmacies/medicines/nearby?name=paracetamol&
 ## 📄 License
 
 MIT
+=======
+# DAWA-FIND
+AI POWERED MEDICINE &amp; NEARBY PHARMACY FINDER
+>>>>>>> origin/main
