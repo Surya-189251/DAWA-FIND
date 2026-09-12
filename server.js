@@ -1,38 +1,209 @@
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 
 const app = express();
 
-// CLIENT_ORIGIN can be a single URL or a comma-separated list
-const origins = (process.env.CLIENT_ORIGIN || '*')
+/*
+|--------------------------------------------------------------------------
+| CORS
+|--------------------------------------------------------------------------
+|
+| Allow:
+| 1. Local development
+| 2. Production Vercel frontend
+| 3. Dawa-Find Vercel preview deployments
+| 4. Any additional origins supplied through CLIENT_ORIGIN
+|
+*/
+
+const configuredOrigins = (process.env.CLIENT_ORIGIN || '')
   .split(',')
-  .map((s) => s.trim())
+  .map((origin) => origin.trim())
   .filter(Boolean);
-app.use(cors({ origin: origins.includes('*') ? '*' : origins, credentials: true }));
-// Prescription scans arrive as base64 data URLs, which blow past the 100kb default.
-app.use(express.json({ limit: '12mb' }));
 
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+function isAllowedOrigin(origin) {
+  // Requests such as curl/Postman/server-to-server may not have Origin
+  if (!origin) {
+    return true;
+  }
 
-app.use('/api/v1/auth', require('./routes/authRoutes'));
-app.use('/api/v1/pharmacies', require('./routes/pharmacyRoutes'));
-app.use('/api/v1/medicines', require('./routes/medicineRoutes'));
-app.use('/api/v1/partner', require('./routes/partnerRoutes'));
-app.use('/api/v1/admin', require('./routes/adminRoutes'));
-app.use('/api/v1/ai', require('./routes/aiRoutes'));
+  // Explicit origins from Render environment variable
+  if (configuredOrigins.includes(origin)) {
+    return true;
+  }
+
+  // Local development
+  if (
+    origin === 'http://localhost:5173' ||
+    origin === 'http://127.0.0.1:5173'
+  ) {
+    return true;
+  }
+
+  // Main production frontend
+  if (origin === 'https://dawa-find-frontend.vercel.app') {
+    return true;
+  }
+
+  // Vercel preview deployments for this project
+  try {
+    const url = new URL(origin);
+
+    if (
+      url.protocol === 'https:' &&
+      (
+        url.hostname === 'dawa-find-frontend.vercel.app' ||
+        (
+          url.hostname.startsWith('dawa-find-frontend-') &&
+          url.hostname.endsWith('.vercel.app')
+        )
+      )
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn('Blocked by CORS:', origin);
+
+    return callback(
+      new Error(`CORS blocked origin: ${origin}`)
+    );
+  },
+
+  credentials: true,
+
+  methods: [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+  ],
+
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+  ],
+};
+
+app.use(cors(corsOptions));
+
+/*
+|--------------------------------------------------------------------------
+| BODY PARSER
+|--------------------------------------------------------------------------
+|
+| Prescription scans contain base64 image data and need a larger limit.
+|
+*/
+
+app.use(
+  express.json({
+    limit: '12mb',
+  })
+);
+
+/*
+|--------------------------------------------------------------------------
+| HEALTH CHECK
+|--------------------------------------------------------------------------
+*/
+
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+  });
+});
+
+/*
+|--------------------------------------------------------------------------
+| API ROUTES
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  '/api/v1/auth',
+  require('./routes/authRoutes')
+);
+
+app.use(
+  '/api/v1/pharmacies',
+  require('./routes/pharmacyRoutes')
+);
+
+app.use(
+  '/api/v1/medicines',
+  require('./routes/medicineRoutes')
+);
+
+app.use(
+  '/api/v1/partner',
+  require('./routes/partnerRoutes')
+);
+
+app.use(
+  '/api/v1/admin',
+  require('./routes/adminRoutes')
+);
+
+app.use(
+  '/api/v1/ai',
+  require('./routes/aiRoutes')
+);
+
+/*
+|--------------------------------------------------------------------------
+| ERROR HANDLER
+|--------------------------------------------------------------------------
+*/
 
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(500).json({ message: err.message || 'Server error' });
+
+  res.status(500).json({
+    message:
+      err.message ||
+      'Server error',
+  });
 });
 
-const PORT = process.env.PORT || 5000;
+/*
+|--------------------------------------------------------------------------
+| START SERVER
+|--------------------------------------------------------------------------
+*/
+
+const PORT =
+  process.env.PORT || 5000;
 
 connectDB()
-  .then(() => app.listen(PORT, () => console.log(`API on http://localhost:${PORT}`)))
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(
+        `API on http://localhost:${PORT}`
+      );
+    });
+  })
   .catch((err) => {
-    console.error('DB connection failed:', err.message);
+    console.error(
+      'DB connection failed:',
+      err.message
+    );
+
     process.exit(1);
   });
